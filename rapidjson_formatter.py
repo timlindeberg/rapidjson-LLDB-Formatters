@@ -1,8 +1,12 @@
+from __future__ import print_function
 import lldb
 import lldb.formatters.Logger
+import sys
+import traceback
 
-lldb.formatters.Logger._lldb_formatters_debug_level = 2
-lldb.formatters.Logger._lldb_formatters_debug_filename = "/Users/tlin/lldboutput.txt"
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
+
 
 kNullType = 0
 kFalseType = 1
@@ -25,7 +29,6 @@ kInlineStrFlag = 0x1000
 kObjectFlag = kObjectType
 kArrayFlag = kArrayType
 
-
 kNullFlag = kNullType
 kTrueFlag = kTrueType | kBoolFlag
 kFalseFlag = kFalseType | kBoolFlag
@@ -38,10 +41,6 @@ kNumberAnyFlag = kNumberType | kNumberFlag | kIntFlag | kInt64Flag | kUintFlag |
 kConstStringFlag = kStringType | kStringFlag
 kCopyStringFlag = kStringType | kStringFlag | kCopyFlag
 kShortStringFlag = kStringType | kStringFlag | kCopyFlag | kInlineStrFlag
-kObjectFlag = kObjectType
-kArrayFlag = kArrayType
-
-logger = lldb.formatters.Logger.Logger()
 
 
 def get_string_from_array(array):
@@ -64,117 +63,151 @@ def get_string_from_memory(starting_address):
 
     error_ref = lldb.SBError()
     process = lldb.debugger.GetSelectedTarget().GetProcess()
-    CHUNK_SIZE = 1024
+    chunk_size = 1024
     while True:
-        memory = process.ReadMemory(address, CHUNK_SIZE, error_ref)
+        memory = process.ReadMemory(address, chunk_size, error_ref)
         if not error_ref.Success():
             return ""
         b = bytearray(memory)
         i = 0
-        while i < CHUNK_SIZE:
+        while i < chunk_size:
             v = b[i]
             if v == 0:
                 return res
             res += chr(v)
             i += 1
-        address += CHUNK_SIZE
+        address += chunk_size
 
 
-def value_SummaryProvider(valobj, dict):
-    try:
-        data = valobj.GetChildMemberWithName("data_")
-        f = data.GetChildMemberWithName("f")
-        flags = f.GetChildMemberWithName("flags").GetValueAsUnsigned()
-
-        if flags == kNullFlag:  return "null"
-        if flags == kFalseFlag: return "false"
-        if flags == kTrueFlag:  return "true"
-
-        if flags & kStringFlag != 0:
-            if flags & kInlineStrFlag != 0:
-                ss = data.GetChildMemberWithName("ss")
-                str = ss.GetChildMemberWithName("str")
-                return '"%s"' % get_string_from_array(str)
-            else:
-                s = data.GetChildMemberWithName("s")
-                str = s.GetChildMemberWithName("str")
-                adress = int(str.GetValue(), 16) & 0x0000FFFFFFFFFFFF
-                return '"%s"' % get_string_from_memory(adress)
-
-        n = data.GetChildMemberWithName("n")
-        if flags & kDoubleFlag != 0: return n.GetChildMemberWithName("d").GetValue()
-        if flags & kUint64Flag != 0: return n.GetChildMemberWithName("u64").GetValue()
-        if flags & kInt64Flag != 0:  return n.GetChildMemberWithName("i64").GetValue()
-        if flags & kUintFlag != 0:   return n.GetChildMemberWithName("u").GetChildMemberWithName("u").GetValue()
-        if flags & kIntFlag != 0:    return n.GetChildMemberWithName("i").GetChildMemberWithName("i").GetValue()
-        return None
-    except:
-        return None
+def rapidjson_SummaryProvider(valobj, dict):
+    eprint("summary_provider")
+    synth = rapidjson_SynthProvider(valobj, dict)
+    synth.update()
+    return synth.get_summary()
 
 
-class ValueFormatter:
+class rapidjson_SynthProvider:
     def __init__(self, valobj, dict):
         self.valobj = valobj
+        self.data = None
+        self.flags = None
 
     def num_children(self):
-        logger >> "num_children"
-        return self.child_count
+        try:
+            res = self._get_num_children()
+            eprint("num_children %s" % res)
+            return res
+        except:
+            traceback.print_exc()
+            return 0
+
+    def _get_num_children(self):
+        if self.flags == kArrayFlag:
+            data = self._get_data_object("a")
+            return data.GetChildMemberWithName("size").GetValueAsUnsigned()
+        if self.flags == kObjectFlag:
+            data = self._get_data_object("o")
+            return data.GetChildMemberWithName("size").GetValueAsUnsigned()
+        return 0
 
     def get_child_index(self, name):
-        logger >> "get_child_index"
-        logger >> name
+        eprint("get_child_index: %s" % name)
         try:
-            return int(name.lstrip('[').rstrip(']'))
+            return -1
         except:
+            traceback.print_exc()
             return -1
 
     def get_child_at_index(self, index):
-        logger >> "get_child_at_index"
-        logger >> index
-        if index < 0:
-            return None
-        if index >= self.num_children():
-            return None
+        eprint("get_child_at_index: %s" % index)
+
         try:
-            offset = index * self.data_size
-            return self.start.CreateChildAtOffset(
-                '[' + str(index) + ']', offset, self.data_type)
+            res = self._get_child_at_index(index)
+            eprint("res %s: %s" % (index, res))
+            return res
         except:
+            traceback.print_exc()
             return None
+
+    def _get_child_at_index(self, index):
+        eprint("index: %s" % index)
+
+        if self.flags == kArrayFlag: return self._get_array_child(index)
+
+        return None
+
+    def _get_array_child(self, index):
+        arr = self._get_data_object("a")
+        start = arr.GetChildMemberWithName("elements")
+        type = start.GetType().GetPointeeType()
+        offset = index * type.GetByteSize()
+        address = self._get_valid_address(start) + offset
+        return start.CreateValueFromAddress('[' + str(index) + ']', address, type)
 
     def update(self):
-        logger >> "update"
-        self.type = self.valobj.GetType().GetDirectBaseClassAtIndex(0).GetType()
-
-        logger >> "lol"
-        logger >> self.type
-        flags = self.get_flags()
-        is_array = flags & kArrayFlag != 0
-        is_object = flags & kObjectFlag != 0
-        if is_array:
-            data = self.get_data_object("a")
-            self.child_count = data.GetChildMemberWithName("size").GetValueAsUnsigned()
-            self.children_exist = True
-        elif is_object:
-            data = self.get_data_object("o")
-            self.child_count = data.GetChildMemberWithName("size").GetValueAsUnsigned()
-            self.children_exist = True
-        else:
-            self.child_count = 0
-            self.children_exist = False
+        eprint("update")
+        self.data = self.valobj.GetChildMemberWithName("data_")
+        self.flags = self._get_flags()
+        eprint("flags %s" % self.flags)
 
     def has_children(self):
-        logger >> "has_children"
+        res = self.flags == kArrayFlag or self.flags == kObjectFlag
+        eprint("has_children %s" % res)
+        return res
+
+    def get_summary(self):
+        eprint("get_summary")
         try:
-            return self.children_exist
+            if self.flags == kNullFlag:      return "null"
+            if self.flags == kFalseFlag:     return "false"
+            if self.flags == kTrueFlag:      return "true"
+            if self.flags == kArrayFlag:     return "Array, size=%s" % self.num_children()
+            if self.flags == kObjectFlag:    return "Object, size=%s" % self.num_children()
+            if self._is_set(kInlineStrFlag): return self._get_inline_string()
+            if self._is_set(kStringFlag):    return self._get_string()
+            if self._is_set(kDoubleFlag):    return self._get_number_object("d").GetValue()
+            if self._is_set(kUint64Flag):    return self._get_number_object("u64").GetValue()
+            if self._is_set(kInt64Flag):     return self._get_number_object("i64").GetValue()
+            if self._is_set(kUintFlag):      return self._get_number_object("u").GetChildMemberWithName("u").GetValue()
+            if self._is_set(kIntFlag):       return self._get_number_object("i").GetChildMemberWithName("i").GetValue()
+            return None
         except:
-            return False
+            return None
 
-    def get_data_object(self, type):
-        data = self.valobj.GetChildMemberWithName("data_")
-        return data.GetChildMemberWithName(type)
+    def _is_set(self, flag):
+        return (self.flags & flag) != 0
 
-    def get_flags(self):
-        data = self.valobj.GetChildMemberWithName("data_")
-        f = data.GetChildMemberWithName("f")
-        return f.GetChildMemberWithName("flags").GetValueAsUnsigned()
+    def _get_data_object(self, type):
+        return self.data.GetChildMemberWithName(type)
+
+    def _get_number_object(self, type):
+        return self._get_data_object("n").GetChildMemberWithName(type)
+
+    def _get_flags(self):
+        f = self.data.GetChildMemberWithName("f")
+        flags = f.GetChildMemberWithName("flags")
+        return flags.GetValueAsUnsigned()
+
+    def _get_inline_string(self):
+        ss = self._get_data_object("ss")
+        str = ss.GetChildMemberWithName("str")
+        return '"%s"' % get_string_from_array(str)
+
+    def _get_string(self):
+        s = self._get_data_object("s")
+        str = s.GetChildMemberWithName("str")
+        address = self._get_valid_address(str)
+
+        return '"%s"' % get_string_from_memory(address)
+
+    def _get_valid_address(self, obj):
+        return int(obj.GetValue(), 16) & 0x0000FFFFFFFFFFFF
+
+
+def __lldb_init_module(debugger, dict):
+    debugger.HandleCommand(
+         'type synthetic add -l rapidjson_formatter.rapidjson_SynthProvider -x "^rapidjson::GenericValue<.+>$" -w rapidjson')
+    # debugger.HandleCommand(
+    #     'type summary add -F rapidjson_formatter.rapidjson_SummaryProvider -e -x "^rapidjson::GenericValue<.+>$" -w rapidjson')
+    debugger.HandleCommand("type category enable rapidjson")
+
