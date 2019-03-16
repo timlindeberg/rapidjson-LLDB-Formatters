@@ -15,8 +15,12 @@ def __lldb_init_module(debugger, dict):
         'type summary add -F rapidjson_formatter.GenericValue_SummaryProvider -e -x "^rapidjson::GenericValue<.+>$" -w rapidjson')
     debugger.HandleCommand(
         'type synthetic add -l rapidjson_formatter.GenericValue_SynthProvider -x "^rapidjson::GenericValue<.+>$" -w rapidjson')
+
+    # GenericDocument
     debugger.HandleCommand(
-        'type synthetic add -l rapidjson_formatter.GenericValue_SynthProvider -x "^rapidjson::Document$" -w rapidjson')
+        'type synthetic add -l rapidjson_formatter.GenericValue_SynthProvider -x "^rapidjson::GenericDocument<.+>$" -w rapidjson')
+    debugger.HandleCommand(
+        'type summary add -F rapidjson_formatter.GenericValue_SummaryProvider -e -x "^rapidjson::GenericDocument<.+>$" -w rapidjson')
 
     # GenericArray
     debugger.HandleCommand(
