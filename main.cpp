@@ -32,9 +32,9 @@ int main() {
     rapidjson::Value n;
     n.SetNull();
     rapidjson::Value i;
-//    i.SetInt(1);
-//    rapidjson::Value u;
-//    u.SetUint(2);
+    i.SetInt(1);
+    rapidjson::Value u;
+    u.SetUint(2);
 //    rapidjson::Value i64;
 //    i64.SetInt64(3);
 //    rapidjson::Value u64;
@@ -43,10 +43,10 @@ int main() {
 //    fl.SetFloat(5.5);
 //    rapidjson::Value d;
 //    d.SetDouble(6.6);
-//    rapidjson::Value ss;
-//    ss.SetString("ABC");
-//    rapidjson::Value s;
-//    s.SetString(rapidjson::StringRef("ABC12345678910ABC12345678910ABC12345678910ABC12345678910ABC12345678910"));
+    rapidjson::Value ss;
+    ss.SetString("ABC");
+    rapidjson::Value s;
+    s.SetString(rapidjson::StringRef("ABC12345678910ABC12345678910ABC12345678910ABC12345678910ABC12345678910"));
 
     rapidjson::Document doc;
     rapidjson::Value arr1;
@@ -60,8 +60,16 @@ int main() {
     arr2.PushBack(i, doc.GetAllocator());
     arr2.PushBack(arr1, doc.GetAllocator());
 
+    rapidjson::Value arr3;
+    arr3.SetArray();
+    arr3.PushBack(ss, doc.GetAllocator());
+    arr3.PushBack(s, doc.GetAllocator());
 
-    std::vector<int> x =  {1, 2, 3};
+    rapidjson::Value obj;
+    obj.SetObject();
+    obj.AddMember(rapidjson::StringRef("abcdef"), ss, doc.GetAllocator());
+    obj.AddMember(rapidjson::StringRef("bcdefg"), s, doc.GetAllocator());
+    obj.AddMember(rapidjson::StringRef("cdefgh"), arr3, doc.GetAllocator());
 
     return 0;
 }

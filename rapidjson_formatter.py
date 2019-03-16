@@ -80,22 +80,24 @@ def get_string_from_memory(starting_address):
 
 
 def rapidjson_SummaryProvider(valobj, dict):
-    eprint("summary_provider")
     synth = rapidjson_SynthProvider(valobj, dict)
     synth.update()
-    return synth.get_summary()
+    summary = synth.get_summary()
+    return summary
 
 
 class rapidjson_SynthProvider:
     def __init__(self, valobj, dict):
         self.valobj = valobj
+
         self.data = None
         self.flags = None
+        self.type = self.valobj.GetType()
 
     def num_children(self):
+        eprint("num_children %s" % self.valobj.GetName())
         try:
             res = self._get_num_children()
-            eprint("num_children %s" % res)
             return res
         except:
             traceback.print_exc()
@@ -111,7 +113,7 @@ class rapidjson_SynthProvider:
         return 0
 
     def get_child_index(self, name):
-        eprint("get_child_index: %s" % name)
+        eprint("get_child_index(%s) %s" % (name, self.valobj.GetName()))
         try:
             return -1
         except:
@@ -119,52 +121,76 @@ class rapidjson_SynthProvider:
             return -1
 
     def get_child_at_index(self, index):
-        eprint("get_child_at_index: %s" % index)
+        if index < 0:
+            return None
+        if index >= self.num_children():
+            return None
 
         try:
-            res = self._get_child_at_index(index)
-            eprint("res %s: %s" % (index, res))
-            return res
+            if self.flags == kArrayFlag: return self._get_array_child(index)
+            if self.flags == kObjectFlag: return self._get_object_child(index)
+            return None
         except:
             traceback.print_exc()
             return None
 
-    def _get_child_at_index(self, index):
-        eprint("index: %s" % index)
-
-        if self.flags == kArrayFlag: return self._get_array_child(index)
-
-        return None
-
     def _get_array_child(self, index):
         arr = self._get_data_object("a")
         start = arr.GetChildMemberWithName("elements")
-        type = start.GetType().GetPointeeType()
-        offset = index * type.GetByteSize()
+        offset = index * self.type.GetByteSize()
         address = self._get_valid_address(start) + offset
-        return start.CreateValueFromAddress('[' + str(index) + ']', address, type)
+        return self.valobj.CreateValueFromAddress('[' + str(index) + ']', address, self.type)
+
+    def _get_object_child(self, index):
+        address = self._get_member_address(index)
+        masked_address = str(self._mask_address(address))
+        name = self._get_object_name(masked_address, index)
+
+        # We need to create a value form address, otherwise we won't
+        # be able to read the data_ object of the created child
+        obj_child = self.valobj.CreateValueFromExpression(name + "addr", "&reinterpret_cast<rapidjson::Value::Member*>(" + masked_address + ")->value")
+        child_address = int(obj_child.GetValue(), 16)
+        return self.valobj.CreateValueFromAddress(name, child_address, self.type)
+
+    def _get_object_name(self, address, index):
+        data_value = self.valobj.CreateValueFromExpression("name", "reinterpret_cast<rapidjson::Value::Member*>(" + address + ")->name->data_")
+        flags = self._get_flags(data_value)
+        is_inline = flags & kInlineStrFlag != 0
+        member_name = self._get_inline_string(data_value) if is_inline else self._get_string(data_value)
+        return '[%s] %s' % (index, member_name)
+
+    def _get_member_address(self, index):
+        obj = self._get_data_object("o")
+        start = obj.GetChildMemberWithName("members")
+
+        member_type = start.GetType().GetPointeeType()
+        offset = index * member_type.GetByteSize()
+        return self._get_valid_address(start) + offset
 
     def update(self):
-        eprint("update")
-        self.data = self.valobj.GetChildMemberWithName("data_")
-        self.flags = self._get_flags()
-        eprint("flags %s" % self.flags)
+        eprint("update %s" % self.valobj.GetName())
+
+        # We read the address of the object and use that in CreateValueFromExpression
+        # to fetch the data_ object. This seems to be the only way to access data_
+        # once we've attached a synthetic children provider to the same type
+        address = self.valobj.GetAddress().GetOffset()
+        self.data = self.valobj.CreateValueFromExpression("data", "reinterpret_cast<rapidjson::Value*>(" + str(address) + ")->data_")
+        self.flags = self._get_flags(self.data)
 
     def has_children(self):
-        res = self.flags == kArrayFlag or self.flags == kObjectFlag
-        eprint("has_children %s" % res)
-        return res
+        return self.flags == kArrayFlag or self.flags == kObjectFlag
 
     def get_summary(self):
-        eprint("get_summary")
+        eprint("get_summary %s" % self.valobj.GetName())
+
         try:
             if self.flags == kNullFlag:      return "null"
             if self.flags == kFalseFlag:     return "false"
             if self.flags == kTrueFlag:      return "true"
-            if self.flags == kArrayFlag:     return "Array, size=%s" % self.num_children()
-            if self.flags == kObjectFlag:    return "Object, size=%s" % self.num_children()
-            if self._is_set(kInlineStrFlag): return self._get_inline_string()
-            if self._is_set(kStringFlag):    return self._get_string()
+            if self.flags == kArrayFlag:     return "<Array> size=%s" % self.num_children()
+            if self.flags == kObjectFlag:    return "<Object> size=%s" % self.num_children()
+            if self._is_set(kInlineStrFlag): return self._get_inline_string(self.data)
+            if self._is_set(kStringFlag):    return self._get_string(self.data)
             if self._is_set(kDoubleFlag):    return self._get_number_object("d").GetValue()
             if self._is_set(kUint64Flag):    return self._get_number_object("u64").GetValue()
             if self._is_set(kInt64Flag):     return self._get_number_object("i64").GetValue()
@@ -183,31 +209,41 @@ class rapidjson_SynthProvider:
     def _get_number_object(self, type):
         return self._get_data_object("n").GetChildMemberWithName(type)
 
-    def _get_flags(self):
-        f = self.data.GetChildMemberWithName("f")
+    def _get_flags(self, data_value):
+        f = data_value.GetChildMemberWithName("f")
         flags = f.GetChildMemberWithName("flags")
         return flags.GetValueAsUnsigned()
 
-    def _get_inline_string(self):
-        ss = self._get_data_object("ss")
+    def _get_inline_string(self, data_value):
+        ss = data_value.GetChildMemberWithName("ss")
         str = ss.GetChildMemberWithName("str")
+
         return '"%s"' % get_string_from_array(str)
 
-    def _get_string(self):
-        s = self._get_data_object("s")
+    def _get_string(self, data_value):
+        s = data_value.GetChildMemberWithName("s")
         str = s.GetChildMemberWithName("str")
         address = self._get_valid_address(str)
 
         return '"%s"' % get_string_from_memory(address)
 
+    def _get_pointer_adress(self, pointer_value):
+        return int(pointer_value.GetValue(), 16)
+
     def _get_valid_address(self, obj):
-        return int(obj.GetValue(), 16) & 0x0000FFFFFFFFFFFF
+        return self._mask_address(self._get_pointer_adress(obj))
+
+    def _mask_address(self, address):
+        return address & 0x0000FFFFFFFFFFFF
 
 
 def __lldb_init_module(debugger, dict):
     debugger.HandleCommand(
-         'type synthetic add -l rapidjson_formatter.rapidjson_SynthProvider -x "^rapidjson::GenericValue<.+>$" -w rapidjson')
-    # debugger.HandleCommand(
-    #     'type summary add -F rapidjson_formatter.rapidjson_SummaryProvider -e -x "^rapidjson::GenericValue<.+>$" -w rapidjson')
+        'type summary add -F rapidjson_formatter.rapidjson_SummaryProvider -e -x "^rapidjson::GenericValue<.+>$" -w rapidjson')
+    debugger.HandleCommand(
+         'type synthetic add -l rapidjson_formatter.rapidjson_SynthProvider -x "^rapidjson::GenericValue<.+>$" -w rapidjson_synth')
+    debugger.HandleCommand(
+        'type synthetic add -l rapidjson_formatter.rapidjson_SynthProvider -x "^rapidjson::Document$" -w rapidjson_synth')
     debugger.HandleCommand("type category enable rapidjson")
+    debugger.HandleCommand("type category enable rapidjson_synth")
 
