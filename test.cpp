@@ -41,6 +41,9 @@ int main() {
     auto* docPointer = &doc;
     rapidjson::Value* valuePointer = &doc;
 
+    rapidjson::Value docObj;
+    docObj.SetObject();
+
     rapidjson::Value t;
     t.SetBool(true);
     rapidjson::Value f;

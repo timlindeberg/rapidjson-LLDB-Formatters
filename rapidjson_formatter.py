@@ -44,13 +44,11 @@ class GenericValue_SynthProvider:
         self.dict = dict
         self.data = None
         self.flags = None
-        self.type = None
         self.number_of_children = 0
 
     def update(self):
         self.data = self.valobj.GetChildMemberWithName("data_")
         self.flags = self._get_flags()
-        self.type = self._find_type()
         self.number_of_children = self._get_num_children()
 
     def num_children(self):
@@ -62,8 +60,8 @@ class GenericValue_SynthProvider:
         return int(name[1:name.rfind("]")])
 
     def get_child_at_index(self, index):
-        if self.flags == kArrayFlag:         return self._get_array(index)
-        if self.flags == kObjectFlag:        return self._get_object(index)
+        if self.flags == kArrayFlag:  return self._get_array(index)
+        if self.flags == kObjectFlag: return self._get_object(index)
         return None
 
     def has_children(self):
@@ -98,17 +96,6 @@ class GenericValue_SynthProvider:
     def _get_data(self, name):
         return self.data.GetChildMemberWithName(name)
 
-    def _find_type(self):
-        type = self.valobj.GetType().GetCanonicalType()
-        if "GenericDocument" in type.GetName():
-            type = type.GetDirectBaseClassAtIndex(0).GetType()
-
-        if type.IsPointerType():
-            type = type.GetPointeeType()
-        if type.IsReferenceType():
-            type = type.GetDereferencedType()
-        return type
-
     def _get_num_children(self):
         if self.flags != kArrayFlag and self.flags != kObjectFlag:
             return 0
@@ -118,16 +105,17 @@ class GenericValue_SynthProvider:
 
     def _get_array(self, index):
         arr = self._get_data("a")
-        start = arr.GetChildMemberWithName("elements")
-        offset = index * self.type.GetByteSize()
-        address = self._get_valid_address(start) + offset
-        return self.valobj.CreateValueFromAddress('[' + str(index) + ']', address, self.type)
+        elements = arr.GetChildMemberWithName("elements")
+        element_type = elements.GetType().GetPointeeType()
+        offset = index * element_type.GetByteSize()
+        address = self._get_valid_address(elements) + offset
+        return self.valobj.CreateValueFromAddress('[' + str(index) + ']', address, element_type)
 
     def _get_object(self, index):
         member = self._get_member_value(index)
         name = self._get_name(member)
-        data = member.GetChildMemberWithName("value").GetData()
-        return self.valobj.CreateValueFromData(name, data, self.type)
+        value = member.GetChildMemberWithName("value")
+        return self.valobj.CreateValueFromData(name, value.GetData(), value.GetType())
 
     def _get_member_value(self, index):
         obj = self._get_data("o")
