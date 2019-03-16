@@ -3,6 +3,7 @@ import lldb
 import lldb.formatters.Logger
 import traceback
 
+
 def eprint(*args, **kwargs):
     import sys
     print(*args, file=sys.stderr, **kwargs)
@@ -31,15 +32,18 @@ def __lldb_init_module(debugger, dict):
 
     debugger.HandleCommand("type category enable rapidjson")
 
+
 def GenericValue_SummaryProvider(valobj, dict):
     synth = GenericValue_SynthProvider(valobj, dict)
     synth.update()
     return synth.get_summary()
 
+
 class GenericValue_SynthProvider:
     def __init__(self, valobj, dict):
         valobj.SetPreferSyntheticValue(False)
         self.valobj = valobj
+        self.dict = dict
         self.data = None
         self.flags = None
         self.type = self.valobj.GetType()
@@ -106,9 +110,10 @@ class GenericValue_SynthProvider:
 
     def _get_num_children(self):
         def get_type():
-            if self.flags == kArrayFlag:    return "a"
-            elif self.flags == kObjectFlag: return "o"
-            else:                           return ""
+            if self.flags == kArrayFlag:  return "a"
+            if self.flags == kObjectFlag: return "o"
+            return ""
+
         try:
             return self._get_object_on_data(get_type()).GetChildMemberWithName("size").GetValueAsUnsigned()
         except:
@@ -123,30 +128,25 @@ class GenericValue_SynthProvider:
         return self.valobj.CreateValueFromAddress('[' + str(index) + ']', address, self.type)
 
     def _get_object_child(self, index):
-        address = self._get_member_address(index)
-        masked_address = str(mask_address(address))
-        name = self._get_object_name(masked_address, index)
+        member = self._get_member_value(index)
+        name = self._get_name(member)
+        data = member.GetChildMemberWithName("value").GetData()
+        return self.valobj.CreateValueFromData(name, data, self.type)
 
-        # We need to create a value form address, otherwise we won't
-        # be able to read the data_ object of the created child.
-        expr = "&reinterpret_cast<rapidjson::Value::Member*>(%s)->value" % masked_address
-        obj_child = self.valobj.CreateValueFromExpression(name + "addr", expr)
-        return self.valobj.CreateValueFromAddress(name, get_pointer_adress(obj_child), self.type)
-
-    def _get_object_name(self, address, index):
-        expr = "reinterpret_cast<rapidjson::Value::Member*>(%s)->name->data_" % address
-        data_value = self.valobj.CreateValueFromExpression("name", expr)
-        flags = get_flags(data_value)
-        member_name = get_string(flags, data_value)
-        return member_name
-
-    def _get_member_address(self, index):
+    def _get_member_value(self, index):
         obj = self._get_object_on_data("o")
-        start = obj.GetChildMemberWithName("members")
-
-        member_type = start.GetType().GetPointeeType()
+        members_pointer = obj.GetChildMemberWithName("members")
+        member_type = members_pointer.GetType().GetPointeeType()
         offset = index * member_type.GetByteSize()
-        return get_valid_address(start) + offset
+        address = get_valid_address(members_pointer) + offset
+
+        return self.valobj.CreateValueFromAddress("members" + str(index), address, member_type)
+
+    def _get_name(self, member_value):
+        name_value = member_value.GetChildMemberWithName("name")
+        name_synth = GenericValue_SynthProvider(name_value, self.dict)
+        name_synth.update()
+        return name_synth.get_summary()
 
     def _get_object_on_data(self, type):
         return self.data.GetChildMemberWithName(type)
@@ -165,7 +165,7 @@ class GenericValue_SynthProvider:
 def GenericArrayAndObject_SummaryProvider(valobj, dict):
     synth = GenericArrayAndObject_SynthProvider(valobj, dict)
     synth.update()
-    return "size=%s" % synth.num_children()
+    return synth.get_summary()
 
 
 class GenericArrayAndObject_SynthProvider:
@@ -180,9 +180,6 @@ class GenericArrayAndObject_SynthProvider:
         self.val_synth = GenericValue_SynthProvider(val, self.dict)
         self.val_synth.update()
 
-    def get_summary(self):
-        return self.val_synth.get_summary()
-
     def num_children(self):
         return self.val_synth.num_children()
 
@@ -194,6 +191,10 @@ class GenericArrayAndObject_SynthProvider:
 
     def has_children(self):
         return self.val_synth.has_children()
+
+    def get_summary(self):
+        is_null = self.val_synth.flags == kNullFlag
+        return "null" if is_null else "size=%s" % self.num_children()
 
 
 def get_string_from_array(array):
