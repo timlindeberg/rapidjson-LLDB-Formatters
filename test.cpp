@@ -92,12 +92,17 @@ int main() {
     arr3.PushBack(s2, doc.GetAllocator());
     arr3.PushBack(obj1, doc.GetAllocator());
 
+    auto array = arr3.GetArray();
+
+
     rapidjson::Value obj2;
     obj2.SetObject();
     obj2.AddMember(rapidjson::StringRef("myUnsigned"), u, doc.GetAllocator());
     obj2.AddMember(s3, s4, doc.GetAllocator());
     obj2.AddMember(rapidjson::StringRef("myArray"), arr3, doc.GetAllocator());
     obj2.AddMember(rapidjson::StringRef("myInt64"), i64, doc.GetAllocator());
+
+    auto object = obj2.GetObject();
 
     std::vector<rapidjson::Value> v;
     v.push_back(std::move(obj2));
@@ -110,7 +115,6 @@ int main() {
     asciiArray.SetArray();
     asciiArray.PushBack(utf16int, asciiDoc.GetAllocator());
 
-    auto array = asciiArray.GetArray();
 
     return 0;
 }

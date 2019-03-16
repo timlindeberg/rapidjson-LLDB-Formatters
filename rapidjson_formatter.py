@@ -9,22 +9,36 @@ def eprint(*args, **kwargs):
 
 
 def __lldb_init_module(debugger, dict):
+    # GenericValue
     debugger.HandleCommand(
-        'type summary add -F rapidjson_formatter.SummaryProvider -e -x "^rapidjson::GenericValue<.+>$" -w rapidjson')
+        'type summary add -F rapidjson_formatter.GenericValue_SummaryProvider -e -x "^rapidjson::GenericValue<.+>$" -w rapidjson')
     debugger.HandleCommand(
-        'type synthetic add -l rapidjson_formatter.SynthProvider -x "^rapidjson::GenericValue<.+>$" -w rapidjson')
+        'type synthetic add -l rapidjson_formatter.GenericValue_SynthProvider -x "^rapidjson::GenericValue<.+>$" -w rapidjson')
     debugger.HandleCommand(
-        'type synthetic add -l rapidjson_formatter.SynthProvider -x "^rapidjson::Document$" -w rapidjson')
+        'type synthetic add -l rapidjson_formatter.GenericValue_SynthProvider -x "^rapidjson::Document$" -w rapidjson')
+
+    # GenericArray
+    debugger.HandleCommand(
+        'type summary add -F rapidjson_formatter.GenericArrayAndObject_SummaryProvider -e -x "^rapidjson::GenericArray<.+>$" -w rapidjson')
+    debugger.HandleCommand(
+        'type synthetic add -l rapidjson_formatter.GenericArrayAndObject_SynthProvider -x "^rapidjson::GenericArray<.+>$" -w rapidjson')
+
+    # GenericObject
+    debugger.HandleCommand(
+        'type summary add -F rapidjson_formatter.GenericArrayAndObject_SummaryProvider -e -x "^rapidjson::GenericObject<.+>$" -w rapidjson')
+    debugger.HandleCommand(
+        'type synthetic add -l rapidjson_formatter.GenericArrayAndObject_SynthProvider -x "^rapidjson::GenericObject<.+>$" -w rapidjson')
+
     debugger.HandleCommand("type category enable rapidjson")
 
-
-def SummaryProvider(valobj, dict):
-    synth = SynthProvider(valobj, dict)
+def GenericValue_SummaryProvider(valobj, dict):
+    synth = GenericValue_SynthProvider(valobj, dict)
     synth.update()
     return synth.get_summary()
 
-class SynthProvider:
+class GenericValue_SynthProvider:
     def __init__(self, valobj, dict):
+        valobj.SetPreferSyntheticValue(False)
         self.valobj = valobj
         self.data = None
         self.flags = None
@@ -37,7 +51,7 @@ class SynthProvider:
     def get_child_index(self, name):
         try:
             return int(name[1:name.rfind("]")])
-        except:
+        except ValueError:
             traceback.print_exc()
             return -1
 
@@ -56,7 +70,7 @@ class SynthProvider:
             return None
 
     def update(self):
-        self.data = self._get_data_value()
+        self.data = self.valobj.GetChildMemberWithName("data_")
         self.flags = get_flags(self.data)
         self._num_children = self._get_num_children()
         self.type = self._get_json_type()
@@ -89,14 +103,6 @@ class SynthProvider:
         except:
             traceback.print_exc()
             return None
-
-    def _get_data_value(self):
-        # We read the address of the object and use that in CreateValueFromExpression
-        # to fetch the data_ object. This seems to be the only way to access data_
-        # once we've attached a synthetic children provider for this type
-        address = self.valobj.GetAddress().GetOffset()
-        expr = "reinterpret_cast<rapidjson::Value*>(%s)->data_" % address
-        return self.valobj.CreateValueFromExpression("data", expr)
 
     def _get_num_children(self):
         def get_type():
@@ -154,6 +160,40 @@ class SynthProvider:
         if type.IsReferenceType():
             type = type.GetDereferencedType()
         return type
+
+
+def GenericArrayAndObject_SummaryProvider(valobj, dict):
+    synth = GenericArrayAndObject_SynthProvider(valobj, dict)
+    synth.update()
+    return "size=%s" % synth.num_children()
+
+
+class GenericArrayAndObject_SynthProvider:
+    def __init__(self, valobj, dict):
+        valobj.SetPreferSyntheticValue(False)
+        self.valobj = valobj
+        self.dict = dict
+        self.val_synth = None
+
+    def update(self):
+        val = self.valobj.GetChildMemberWithName("value_").Dereference()
+        self.val_synth = GenericValue_SynthProvider(val, self.dict)
+        self.val_synth.update()
+
+    def get_summary(self):
+        return self.val_synth.get_summary()
+
+    def num_children(self):
+        return self.val_synth.num_children()
+
+    def get_child_index(self, name):
+        return self.val_synth.get_child_index(name)
+
+    def get_child_at_index(self, index):
+        return self.val_synth.get_child_at_index(index)
+
+    def has_children(self):
+        return self.val_synth.has_children()
 
 
 def get_string_from_array(array):
