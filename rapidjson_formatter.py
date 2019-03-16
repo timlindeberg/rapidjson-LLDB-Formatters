@@ -3,9 +3,9 @@ import lldb
 import lldb.formatters.Logger
 import traceback
 
-# def eprint(*args, **kwargs):
-#     import sys
-#     print(*args, file=sys.stderr, **kwargs)
+def eprint(*args, **kwargs):
+    import sys
+    print(*args, file=sys.stderr, **kwargs)
 
 
 def __lldb_init_module(debugger, dict):
@@ -26,7 +26,6 @@ def SummaryProvider(valobj, dict):
 class SynthProvider:
     def __init__(self, valobj, dict):
         self.valobj = valobj
-
         self.data = None
         self.flags = None
         self.type = self.valobj.GetType()
@@ -60,6 +59,7 @@ class SynthProvider:
         self.data = self._get_data_value()
         self.flags = get_flags(self.data)
         self._num_children = self._get_num_children()
+        self.type = self._get_json_type()
 
     def has_children(self):
         return self._num_children > 0
@@ -122,9 +122,7 @@ class SynthProvider:
         name = self._get_object_name(masked_address, index)
 
         # We need to create a value form address, otherwise we won't
-        # be able to read the data_ object of the created child. As an added
-        # benefit, we can put the typedef rapidjson::Value as type instead of
-        # very long rapidjson::GenericValue<...>
+        # be able to read the data_ object of the created child.
         expr = "&reinterpret_cast<rapidjson::Value::Member*>(%s)->value" % masked_address
         obj_child = self.valobj.CreateValueFromExpression(name + "addr", expr)
         return self.valobj.CreateValueFromAddress(name, get_pointer_adress(obj_child), self.type)
@@ -134,7 +132,7 @@ class SynthProvider:
         data_value = self.valobj.CreateValueFromExpression("name", expr)
         flags = get_flags(data_value)
         member_name = get_string(flags, data_value)
-        return '[%s] %s' % (index, member_name)
+        return member_name
 
     def _get_member_address(self, index):
         obj = self._get_object_on_data("o")
@@ -146,6 +144,16 @@ class SynthProvider:
 
     def _get_object_on_data(self, type):
         return self.data.GetChildMemberWithName(type)
+
+    def _get_json_type(self):
+        type = self.valobj.GetType().GetCanonicalType()
+        if "GenericDocument" in type.GetName():
+            type = type.GetDirectBaseClassAtIndex(0).GetType()
+        if type.IsPointerType():
+            type = type.GetPointeeType()
+        if type.IsReferenceType():
+            type = type.GetDereferencedType()
+        return type
 
 
 def get_string_from_array(array):

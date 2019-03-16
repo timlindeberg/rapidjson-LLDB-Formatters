@@ -14,15 +14,32 @@ int main() {
         "object": {
             "A": 1,
             "B": 2,
-            "C": 3
+            "C": {
+                "1": 1,
+                "2": [
+                    {
+                        "a": 1,
+                        "b": 2
+                    },
+                    {
+                        "c": 3,
+                        "d": 4
+                    }
+                ],
+                "3": 3
+            }
         }
     }
     )";
 
     rapidjson::Document doc;
     doc.SetObject();
-    //doc.Parse(json);
+    doc.Parse(json);
 
+    rapidjson::Document& docRef = doc;
+    rapidjson::Value& valueRef = doc;
+    auto* docPointer = &doc;
+    rapidjson::Value* valuePointer = &doc;
 
     rapidjson::Value t;
     t.SetBool(true);
@@ -81,6 +98,19 @@ int main() {
     obj2.AddMember(s3, s4, doc.GetAllocator());
     obj2.AddMember(rapidjson::StringRef("myArray"), arr3, doc.GetAllocator());
     obj2.AddMember(rapidjson::StringRef("myInt64"), i64, doc.GetAllocator());
+
+    std::vector<rapidjson::Value> v;
+    v.push_back(std::move(obj2));
+    v.push_back(std::move(doc));
+
+    rapidjson::GenericDocument<rapidjson::ASCII<>> asciiDoc;
+    rapidjson::GenericValue<rapidjson::ASCII<>> utf16int;
+    utf16int.SetInt(5);
+    rapidjson::GenericValue<rapidjson::ASCII<>> asciiArray;
+    asciiArray.SetArray();
+    asciiArray.PushBack(utf16int, asciiDoc.GetAllocator());
+
+    auto array = asciiArray.GetArray();
 
     return 0;
 }
