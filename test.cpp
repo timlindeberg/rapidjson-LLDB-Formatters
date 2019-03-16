@@ -36,8 +36,8 @@ int main() {
     doc.SetObject();
     doc.Parse(json);
 
-    rapidjson::Document& docRef = doc;
-    rapidjson::Value& valueRef = doc;
+    const rapidjson::Document& docRef = doc;
+    const rapidjson::Value& valueRef = doc;
     auto* docPointer = &doc;
     rapidjson::Value* valuePointer = &doc;
 
@@ -60,7 +60,7 @@ int main() {
     rapidjson::Value d;
     d.SetDouble(6.6);
     rapidjson::Value s1;
-    s1.SetString("ABC");
+    s1.SetString("ABC", doc.GetAllocator());
     rapidjson::Value s2;
     s2.SetString(rapidjson::StringRef("ABC12345678910ABC12345678910ABC12345678910ABC12345678910ABC12345678910"));
     rapidjson::Value s3;
@@ -109,12 +109,14 @@ int main() {
     v.push_back(std::move(doc));
 
     rapidjson::GenericDocument<rapidjson::ASCII<>> asciiDoc;
+    asciiDoc.SetObject();
     rapidjson::GenericValue<rapidjson::ASCII<>> utf16int;
     utf16int.SetInt(5);
     rapidjson::GenericValue<rapidjson::ASCII<>> asciiArray;
     asciiArray.SetArray();
     asciiArray.PushBack(utf16int, asciiDoc.GetAllocator());
 
+    asciiDoc.AddMember(rapidjson::StringRef("myASCIIArray"), asciiArray, asciiDoc.GetAllocator());
 
     return 0;
 }
