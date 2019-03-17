@@ -9,7 +9,7 @@ The formatter works the following types:
     
 Tested on Mac OSX with `python 2.7`.
 
-#Example
+# Example
 
 ```c++
 rapidjson::Document doc;
