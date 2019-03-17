@@ -1,43 +1,31 @@
 import lldb
 import lldb.formatters.Logger
 import struct
+import os
 
 
 def __lldb_init_module(debugger, dict):
-    # GenericValue
-    debugger.HandleCommand(
-        'type summary add -F rapidjson_formatter.GenericValue_SummaryProvider -e -x "^rapidjson::GenericValue<.+>$" -w rapidjson')
-    debugger.HandleCommand(
-        'type synthetic add -l rapidjson_formatter.GenericValue_SynthProvider -x "^rapidjson::GenericValue<.+>$" -w rapidjson')
+    file_name = os.path.splitext(os.path.basename(__file__))[0]
 
-    # GenericDocument
-    debugger.HandleCommand(
-        'type synthetic add -l rapidjson_formatter.GenericValue_SynthProvider -x "^rapidjson::GenericDocument<.+>$" -w rapidjson')
-    debugger.HandleCommand(
-        'type summary add -F rapidjson_formatter.GenericValue_SummaryProvider -e -x "^rapidjson::GenericDocument<.+>$" -w rapidjson')
+    def add_providers(type, summary, synth):
+        debugger.HandleCommand('type summary add -F %s.%s -e -x "^rapidjson::%s<.+>$" -w rapidjson' % (file_name, summary, type))
+        debugger.HandleCommand('type synthetic add -l %s.%s -x "^rapidjson::%s<.+>$" -w rapidjson' % (file_name, synth, type))
 
-    # GenericArray
-    debugger.HandleCommand(
-        'type summary add -F rapidjson_formatter.GenericArrayAndObject_SummaryProvider -e -x "^rapidjson::GenericArray<.+>$" -w rapidjson')
-    debugger.HandleCommand(
-        'type synthetic add -l rapidjson_formatter.GenericArrayAndObject_SynthProvider -x "^rapidjson::GenericArray<.+>$" -w rapidjson')
-
-    # GenericObject
-    debugger.HandleCommand(
-        'type summary add -F rapidjson_formatter.GenericArrayAndObject_SummaryProvider -e -x "^rapidjson::GenericObject<.+>$" -w rapidjson')
-    debugger.HandleCommand(
-        'type synthetic add -l rapidjson_formatter.GenericArrayAndObject_SynthProvider -x "^rapidjson::GenericObject<.+>$" -w rapidjson')
+    add_providers('GenericValue', 'GenericValue_SummaryProvider', 'GenericValue_SyntheticProvider')
+    add_providers('GenericDocument', 'GenericValue_SummaryProvider', 'GenericValue_SyntheticProvider')
+    add_providers('GenericArray', 'GenericWrapper_SummaryProvider', 'GenericWrapper_SyntheticProvider')
+    add_providers('GenericObject', 'GenericWrapper_SummaryProvider', 'GenericWrapper_SyntheticProvider')
 
     debugger.HandleCommand("type category enable rapidjson")
 
 
 def GenericValue_SummaryProvider(valobj, dict):
-    synth = GenericValue_SynthProvider(valobj, dict)
+    synth = GenericValue_SyntheticProvider(valobj, dict)
     synth.update()
     return synth.get_summary()
 
 
-class GenericValue_SynthProvider:
+class GenericValue_SyntheticProvider:
     def __init__(self, valobj, dict):
         valobj.SetPreferSyntheticValue(False)
         self.valobj = valobj
@@ -47,7 +35,7 @@ class GenericValue_SynthProvider:
         self.number_of_children = 0
 
     def update(self):
-        self.data = self.valobj.GetChildMemberWithName("data_")
+        self.data = self.valobj.GetChildMemberWithName('data_')
         self.flags = self._get_flags()
         self.number_of_children = self._get_num_children()
 
@@ -55,9 +43,9 @@ class GenericValue_SynthProvider:
         return self.number_of_children
 
     def get_child_index(self, name):
-        if not name or name[0] != "[":
+        if not name or name[0] != '[':
             return -1
-        return int(name[1:name.rfind("]")])
+        return int(name[1:name.rfind(']')])
 
     def get_child_at_index(self, index):
         if self.flags == kArrayFlag:  return self._get_array(index)
@@ -70,24 +58,24 @@ class GenericValue_SynthProvider:
     def get_summary(self):
         flags = self.flags
 
-        def get_number_object(type):
-            return self._get_data("n").GetChildMemberWithName(type)
+        def get_number_object(name):
+            return self._get_data('n').GetChildMemberWithName(name)
 
-        if flags == kNullFlag:        return "null"
-        if flags == kFalseFlag:       return "false"
-        if flags == kTrueFlag:        return "true"
-        if flags == kArrayFlag:       return "<Array> size=%s" % self.number_of_children
-        if flags == kObjectFlag:      return "<Object> size=%s" % self.number_of_children
-        if self._is_set(kStringFlag): return self._get_string()
-        if self._is_set(kDoubleFlag): return get_number_object("d").GetValue()
-        if self._is_set(kUint64Flag): return get_number_object("u64").GetValue()
-        if self._is_set(kInt64Flag):  return get_number_object("i64").GetValue()
-        if self._is_set(kUintFlag):   return get_number_object("u").GetChildMemberWithName("u").GetValue()
-        if self._is_set(kIntFlag):    return get_number_object("i").GetChildMemberWithName("i").GetValue()
+        if flags == kNullFlag:        return 'null'
+        if flags == kFalseFlag:       return 'false'
+        if flags == kTrueFlag:        return 'true'
+        if flags == kArrayFlag:       return '<Array> size=%s'  % self.number_of_children
+        if flags == kObjectFlag:      return '<Object> size=%s' % self.number_of_children
+        if self._is_set(kStringFlag): return '"%s"'             % self._get_string()
+        if self._is_set(kDoubleFlag): return '<Double> %s'      % get_number_object('d').GetValue()
+        if self._is_set(kIntFlag):    return '<Int> %s'         % get_number_object('i').GetChildMemberWithName('i').GetValue()
+        if self._is_set(kUintFlag):   return '<Uint> %s'        % get_number_object('u').GetChildMemberWithName('u').GetValue()
+        if self._is_set(kUint64Flag): return '<Uint64> %s'      % get_number_object('u64').GetValue()
+        if self._is_set(kInt64Flag):  return '<Int64> %s'       % get_number_object('i64').GetValue()
         return None
 
     def _get_flags(self):
-        flags = self._get_data("f").GetChildMemberWithName("flags")
+        flags = self._get_data('f').GetChildMemberWithName('flags')
         return flags.GetValueAsUnsigned()
 
     def _is_set(self, flag):
@@ -100,97 +88,76 @@ class GenericValue_SynthProvider:
         if self.flags != kArrayFlag and self.flags != kObjectFlag:
             return 0
 
-        obj = "a" if self.flags == kArrayFlag else "o"
-        return self._get_data(obj).GetChildMemberWithName("size").GetValueAsUnsigned()
+        name = 'a' if self.flags == kArrayFlag else 'o'
+        return self._get_data(name).GetChildMemberWithName('size').GetValueAsUnsigned()
 
     def _get_array(self, index):
-        arr = self._get_data("a")
-        elements = arr.GetChildMemberWithName("elements")
+        array_data = self._get_data('a')
+        elements = array_data.GetChildMemberWithName('elements')
         element_type = elements.GetType().GetPointeeType()
         offset = index * element_type.GetByteSize()
-        address = self._get_valid_address(elements) + offset
-        return self.valobj.CreateValueFromAddress('[' + str(index) + ']', address, element_type)
+        address = self._get_address(elements) + offset
+        return self.valobj.CreateValueFromAddress('[%s]' % index, address, element_type)
 
     def _get_object(self, index):
         member = self._get_member_value(index)
         name = self._get_name(member)
-        value = member.GetChildMemberWithName("value")
+        value = member.GetChildMemberWithName('value')
         return self.valobj.CreateValueFromData(name, value.GetData(), value.GetType())
 
     def _get_member_value(self, index):
-        obj = self._get_data("o")
-        members_pointer = obj.GetChildMemberWithName("members")
+        object_data = self._get_data('o')
+        members_pointer = object_data.GetChildMemberWithName('members')
         member_type = members_pointer.GetType().GetPointeeType()
         offset = index * member_type.GetByteSize()
-        address = self._get_valid_address(members_pointer) + offset
-        return self.valobj.CreateValueFromAddress("members" + str(index), address, member_type)
+        address = self._get_address(members_pointer) + offset
+        return self.valobj.CreateValueFromAddress('member%s' % index, address, member_type)
 
     def _get_name(self, member_value):
-        name_value = member_value.GetChildMemberWithName("name")
-        name_synth = GenericValue_SynthProvider(name_value, self.dict)
+        name_value = member_value.GetChildMemberWithName('name')
+        name_synth = GenericValue_SyntheticProvider(name_value, self.dict)
         name_synth.update()
         return name_synth.get_summary()
 
     def _get_string(self):
         if self._is_set(kInlineStrFlag):
-            return self._get_inline_string()
+            str = self._get_data('ss').GetChildMemberWithName('str')
+            address = str.GetAddress().GetOffset()
+            return self._read_string_from_memory(address, chunk_size=64)
+        else:
+            str = self._get_data('s').GetChildMemberWithName('str')
+            address = self._get_address(str)
+            return self._read_string_from_memory(address, chunk_size=1024)
 
-        str = self._get_data("s").GetChildMemberWithName("str")
-        address = self._get_valid_address(str)
-
-        return '"%s"' % self._get_string_from_memory(address)
-
-    def _get_inline_string(self):
-        str = self._get_data("ss").GetChildMemberWithName("str")
-        return '"%s"' % self._get_string_from_array(str)
-
-    def _get_valid_address(self, pointer_value):
-        address = int(pointer_value.GetValue(), 16)
-        is_64_bit_os = struct.calcsize("P") == 8
-        return address & 0x0000FFFFFFFFFFFF if is_64_bit_os else address
-
-    def _get_string_from_array(self, array):
-        size = array.GetNumChildren()
-        res = ""
-        i = 0
-        while i < size:
-            v = array.GetChildAtIndex(i).GetValueAsUnsigned()
-            if v == 0:
-                break
-            res += chr(v)
-            i += 1
-
-        return res
-
-    def _get_string_from_memory(self, starting_address):
-        res = ""
-        address = starting_address
-
+    def _read_string_from_memory(self, starting_address, chunk_size):
         error_ref = lldb.SBError()
         process = lldb.debugger.GetSelectedTarget().GetProcess()
-        chunk_size = 1024
+        chars = []
+
+        address = starting_address
         while True:
-            memory = process.ReadMemory(address, chunk_size, error_ref)
-            if not error_ref.Success():
-                return ""
-            b = bytearray(memory)
-            i = 0
-            while i < chunk_size:
-                v = b[i]
+            memory = bytearray(process.ReadMemory(address, chunk_size, error_ref))
+            if not error_ref.Success(): return 'Could not read memory 0x%x' % address
+
+            for i in range(chunk_size):
+                v = memory[i]
                 if v == 0:
-                    return res
-                res += chr(v)
-                i += 1
+                    return ''.join(chars)
+                chars.append(chr(v))
             address += chunk_size
 
+    def _get_address(self, pointer_value):
+        address = int(pointer_value.GetValue(), 16)
+        return address & 0x0000FFFFFFFFFFFF if IS_64_BIT_OS else address
 
-def GenericArrayAndObject_SummaryProvider(valobj, dict):
-    synth = GenericArrayAndObject_SynthProvider(valobj, dict)
+
+def GenericWrapper_SummaryProvider(valobj, dict):
+    synth = GenericWrapper_SyntheticProvider(valobj, dict)
     synth.update()
     return synth.get_summary()
 
 
-class GenericArrayAndObject_SynthProvider:
+class GenericWrapper_SyntheticProvider:
     def __init__(self, valobj, dict):
         valobj.SetPreferSyntheticValue(False)
         self.valobj = valobj
@@ -198,8 +165,8 @@ class GenericArrayAndObject_SynthProvider:
         self.val_synth = None
 
     def update(self):
-        val = self.valobj.GetChildMemberWithName("value_").Dereference()
-        self.val_synth = GenericValue_SynthProvider(val, self.dict)
+        val = self.valobj.GetChildMemberWithName('value_').Dereference()
+        self.val_synth = GenericValue_SyntheticProvider(val, self.dict)
         self.val_synth.update()
 
     def num_children(self):
@@ -216,10 +183,11 @@ class GenericArrayAndObject_SynthProvider:
 
     def get_summary(self):
         is_null = self.val_synth.flags == kNullFlag
-        return "null" if is_null else "size=%s" % self.num_children()
+        return 'null' if is_null else 'size=%s' % self.num_children()
 
 
-# Taken directly from rapidjson/document.h
+IS_64_BIT_OS = struct.calcsize('P') == 8
+
 kNullType = 0
 kFalseType = 1
 kTrueType = 2

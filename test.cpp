@@ -1,6 +1,7 @@
-#include <iostream>
 #include <vector>
 #include "rapidjson/document.h"
+#include "rapidjson/stringbuffer.h"
+#include "rapidjson/writer.h"
 
 int main() {
     auto json = R"(
@@ -11,9 +12,10 @@ int main() {
         "false": false,
         "null": null,
         "array": [1, 2, 3],
+        "string": "«ταБЬℓσ»: 1<2 & 4+1>3, now 20% off! 😎",
         "object": {
             "A": 1,
-            "B": 2,
+            "🆔": 2,
             "C": {
                 "1": 1,
                 "2": [
@@ -41,9 +43,6 @@ int main() {
     auto* docPointer = &doc;
     rapidjson::Value* valuePointer = &doc;
 
-    rapidjson::Value docObj;
-    docObj.SetObject();
-
     rapidjson::Value t;
     t.SetBool(true);
     rapidjson::Value f;
@@ -51,7 +50,7 @@ int main() {
     rapidjson::Value n;
     n.SetNull();
     rapidjson::Value i;
-    i.SetInt(1);
+    i.SetInt(-1);
     rapidjson::Value u;
     u.SetUint(2);
     rapidjson::Value i64;
@@ -63,13 +62,16 @@ int main() {
     rapidjson::Value d;
     d.SetDouble(6.6);
     rapidjson::Value s1;
-    s1.SetString("ABC", doc.GetAllocator());
+    s1.SetString("😎", doc.GetAllocator());
     rapidjson::Value s2;
     s2.SetString(rapidjson::StringRef("ABC12345678910ABC12345678910ABC12345678910ABC12345678910ABC12345678910"));
     rapidjson::Value s3;
-    s3.SetString("dhjkdashjkduqwdaskjhdnsajdqwdyaisdh", doc.GetAllocator());
+
+    s3.SetString("«ταБЬℓσ»: 1<2 & 4+1>3, now 20% off! 😎", doc.GetAllocator());
     rapidjson::Value s4;
     s4.SetString("12345", 5);
+    rapidjson::Value s5;
+    s5.SetString(rapidjson::StringRef("Lorem ipsum dolor sit 💺💺 amet, consectetur adipiscing elit. Nam 🇻🇳🇻🇳🇻🇳 gravida commodo aliquam. Aliquam purus sapien, suscipit vel ligula vulputate, molestie tristique justo. Nam 🇻🇳🇻🇳🇻🇳 tincidunt, sem nec aliquam placerat, enim diam sodales metus, ut vulputate lorem dolor imperdiet elit. Aenean rutrum velit et 🇪🇹🇪🇹 lorem tempus porta. Aenean dictum euismod mauris, ac interdum neque pharetra vitae. Ut porttitor velit neque, non commodo tellus aliquam sed. Duis id 🆔 condimentum magna. Quisque facilisis purus nisi, viverra consequat tortor fermentum in. Aliquam lobortis sapien nec ornare porta. Suspendisse erat leo ♌, gravida at dui dictum, scelerisque commodo libero. Etiam laoreet, lorem sit 💺💺 amet mattis posuere, nisl tellus blandit felis, in vulputate arcu eros in ligula. Ut quam enim, hendrerit non felis ac, vestibulum iaculis justo. Ut quis justo id 🆔🆔🆔 metus convallis consectetur aliquet vel lacus. Aliquam cursus erat elit, et 🇪🇹 interdum dui consectetur eget. Sed feugiat ipsum augue, id 🆔 dictum risus maximus a. Fusce pretium metus at eros ultricies porta."));
 
     rapidjson::Value arr1;
     arr1.SetArray();
