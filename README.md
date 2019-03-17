@@ -1,6 +1,6 @@
 # rapidjson-LLDB-Formatters
 Provides an LLDB data formatter for the [rapidjson](https://github.com/Tencent/rapidjson) library.
-The formatter works the following types:
+The formatter works for the following types:
 
 * `rapidjson::GenericDocument<>`
 * `rapidjson::GenericValue<>`
