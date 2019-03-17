@@ -12,12 +12,12 @@ def __lldb_init_module(debugger, _dict):
         debugger.HandleCommand(
             'type synthetic add -l %s.%s -x "^rapidjson::%s<.+>$" -w rapidjson' % (file_name, synth, type))
 
-    add_providers('GenericValue', 'GenericValue_SummaryProvider', 'GenericValue_SyntheticProvider')
-    add_providers('GenericDocument', 'GenericValue_SummaryProvider', 'GenericValue_SyntheticProvider')
-    add_providers('GenericArray', 'GenericWrapper_SummaryProvider', 'GenericWrapper_SyntheticProvider')
-    add_providers('GenericObject', 'GenericWrapper_SummaryProvider', 'GenericWrapper_SyntheticProvider')
+    add_providers('GenericValue',    'GenericValue_SummaryProvider',   'GenericValue_SyntheticProvider')
+    add_providers('GenericDocument', 'GenericValue_SummaryProvider',   'GenericValue_SyntheticProvider')
+    add_providers('GenericArray',    'GenericWrapper_SummaryProvider', 'GenericWrapper_SyntheticProvider')
+    add_providers('GenericObject',   'GenericWrapper_SummaryProvider', 'GenericWrapper_SyntheticProvider')
 
-    debugger.HandleCommand("type category enable rapidjson")
+    debugger.HandleCommand('type category enable rapidjson')
 
 
 def GenericValue_SummaryProvider(valobj, dict):
@@ -43,10 +43,8 @@ class GenericValue_SyntheticProvider:
     def num_children(self):
         return self.number_of_children
 
-    def get_child_index(name):
-        if not name or name[0] != '[':
-            return -1
-        return int(name[1:name.rfind(']')])
+    def get_child_index(self, name):
+        return int(name[1:name.rfind(']')]) if name and name[0] == '[' else -1
 
     def get_child_at_index(self, index):
         if self.flags == kArrayFlag:  return self._get_array(index)
