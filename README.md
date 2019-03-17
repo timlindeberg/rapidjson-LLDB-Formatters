@@ -1,8 +1,17 @@
 # rapidjson-LLDB-Formatters
 Provides an LLDB data formatter for the [rapidjson](https://github.com/Tencent/rapidjson) library.
-Tested on Mac OSX with `python 2.7`
+The formatter works the following types:
 
-```cpp
+* `rapidjson::GenericDocument<>`
+* `rapidjson::GenericValue<>`
+* `rapidjson::GenericArray<>`
+* `rapidjson::GenericObject<>`
+    
+Tested on Mac OSX with `python 2.7`.
+
+#Example
+
+```c++
 rapidjson::Document doc;
 doc.SetObject();
 doc.Parse(R"(
