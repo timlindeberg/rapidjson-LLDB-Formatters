@@ -1,15 +1,16 @@
 import lldb
-import lldb.formatters.Logger
 import struct
 import os
 
 
-def __lldb_init_module(debugger, dict):
+def __lldb_init_module(debugger, _dict):
     file_name = os.path.splitext(os.path.basename(__file__))[0]
 
     def add_providers(type, summary, synth):
-        debugger.HandleCommand('type summary add -F %s.%s -e -x "^rapidjson::%s<.+>$" -w rapidjson' % (file_name, summary, type))
-        debugger.HandleCommand('type synthetic add -l %s.%s -x "^rapidjson::%s<.+>$" -w rapidjson' % (file_name, synth, type))
+        debugger.HandleCommand(
+            'type summary add -F %s.%s -e -x "^rapidjson::%s<.+>$" -w rapidjson' % (file_name, summary, type))
+        debugger.HandleCommand(
+            'type synthetic add -l %s.%s -x "^rapidjson::%s<.+>$" -w rapidjson' % (file_name, synth, type))
 
     add_providers('GenericValue', 'GenericValue_SummaryProvider', 'GenericValue_SyntheticProvider')
     add_providers('GenericDocument', 'GenericValue_SummaryProvider', 'GenericValue_SyntheticProvider')
@@ -42,7 +43,7 @@ class GenericValue_SyntheticProvider:
     def num_children(self):
         return self.number_of_children
 
-    def get_child_index(self, name):
+    def get_child_index(name):
         if not name or name[0] != '[':
             return -1
         return int(name[1:name.rfind(']')])
@@ -121,15 +122,16 @@ class GenericValue_SyntheticProvider:
 
     def _get_string(self):
         if self._is_set(kInlineStrFlag):
-            str = self._get_data('ss').GetChildMemberWithName('str')
-            address = str.GetAddress().GetOffset()
+            str_value = self._get_data('ss').GetChildMemberWithName('str')
+            address = str_value.GetAddress().GetOffset()
             return self._read_string_from_memory(address, chunk_size=64)
         else:
-            str = self._get_data('s').GetChildMemberWithName('str')
-            address = self._get_address(str)
+            str_value = self._get_data('s').GetChildMemberWithName('str')
+            address = self._get_address(str_value)
             return self._read_string_from_memory(address, chunk_size=1024)
 
-    def _read_string_from_memory(self, starting_address, chunk_size):
+    @staticmethod
+    def _read_string_from_memory(starting_address, chunk_size):
         error_ref = lldb.SBError()
         process = lldb.debugger.GetSelectedTarget().GetProcess()
         chars = []
@@ -146,7 +148,8 @@ class GenericValue_SyntheticProvider:
                 chars.append(chr(v))
             address += chunk_size
 
-    def _get_address(self, pointer_value):
+    @staticmethod
+    def _get_address(pointer_value):
         address = int(pointer_value.GetValue(), 16)
         return address & 0x0000FFFFFFFFFFFF if IS_64_BIT_OS else address
 
