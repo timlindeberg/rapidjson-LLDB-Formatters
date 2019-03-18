@@ -102,7 +102,7 @@ class GenericValue_SyntheticProvider:
         member = self._get_member_value(index)
         name = self._get_name(member)
         value = member.GetChildMemberWithName('value')
-        return self.valobj.CreateValueFromData(name, value.GetData(), value.GetType())
+        return member.CreateChildAtOffset(name, value.GetByteSize(), value.GetType())
 
     def _get_member_value(self, index):
         object_data = self._get_data('o')
@@ -122,32 +122,29 @@ class GenericValue_SyntheticProvider:
         if self._is_set(kInlineStrFlag):
             str_value = self._get_data('ss').GetChildMemberWithName('str')
             address = str_value.GetAddress().GetOffset()
-            return self._read_string_from_memory(address, chunk_size=64)
+            return self._read_string_from_memory(address, chunk_size=32)
         else:
             str_value = self._get_data('s').GetChildMemberWithName('str')
             address = self._get_address(str_value)
             return self._read_string_from_memory(address, chunk_size=1024)
 
-    @staticmethod
-    def _read_string_from_memory(starting_address, chunk_size):
+    def _read_string_from_memory(self, starting_address, chunk_size):
         error_ref = lldb.SBError()
         process = lldb.debugger.GetSelectedTarget().GetProcess()
-        chars = []
 
+        chars = []
         address = starting_address
         while True:
-            memory = bytearray(process.ReadMemory(address, chunk_size, error_ref))
-            if not error_ref.Success(): return 'Could not read memory 0x%x' % address
-
-            for i in range(chunk_size):
-                v = memory[i]
-                if v == 0:
+            memory = process.ReadMemory(address, chunk_size, error_ref)
+            if not error_ref.Success():
+                return 'Could not read memory 0x%x' % address
+            for c in memory:
+                if c == '\0':
                     return ''.join(chars)
-                chars.append(chr(v))
+                chars.append(c)
             address += chunk_size
 
-    @staticmethod
-    def _get_address(pointer_value):
+    def _get_address(self, pointer_value):
         address = int(pointer_value.GetValue(), 16)
         return address & 0x0000FFFFFFFFFFFF if IS_64_BIT_OS else address
 

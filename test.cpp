@@ -11,8 +11,10 @@ int main() {
         "true": true,
         "false": false,
         "null": null,
-        "array": [1, 2, 3],
+        "array": [1, "2", 3],
         "string": "«ταБЬℓσ»: 1<2 & 4+1>3, now 20% off! 😎",
+        "smallString": "ABC",
+        "smallUtfString": "😎",
         "object": {
             "A": 1,
             "🆔": 2,
@@ -21,11 +23,11 @@ int main() {
                 "2": [
                     {
                         "a": 1,
-                        "b": 2
+                        "b": "A"
                     },
                     {
-                        "c": 3,
-                        "d": 4
+                        "c": 2,
+                        "d": "B"
                     }
                 ],
                 "3": 3
