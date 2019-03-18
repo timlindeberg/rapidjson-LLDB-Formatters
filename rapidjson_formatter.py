@@ -1,6 +1,7 @@
 import lldb
 import struct
 import os
+import array
 
 
 def __lldb_init_module(debugger, _dict):
@@ -132,7 +133,7 @@ class GenericValue_SyntheticProvider:
         error_ref = lldb.SBError()
         process = lldb.debugger.GetSelectedTarget().GetProcess()
 
-        chars = []
+        chars = array.array('c') * chunk_size
         address = starting_address
         while True:
             memory = process.ReadMemory(address, chunk_size, error_ref)
