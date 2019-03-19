@@ -1,3 +1,8 @@
+from __future__ import print_function
+def eprint(*args, **kwargs):
+    import sys
+    print(*args, file=sys.stderr, **kwargs)
+
 import lldb
 import struct
 import os
@@ -133,7 +138,7 @@ class GenericValue_SyntheticProvider:
         error_ref = lldb.SBError()
         process = lldb.debugger.GetSelectedTarget().GetProcess()
 
-        chars = array.array('c') * chunk_size
+        chars = array.array('c')
         address = starting_address
         while True:
             memory = process.ReadMemory(address, chunk_size, error_ref)
