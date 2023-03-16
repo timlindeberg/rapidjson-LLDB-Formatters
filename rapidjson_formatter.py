@@ -125,30 +125,22 @@ class GenericValue_SyntheticProvider:
         return name_synth.get_summary()
 
     def _get_string(self):
+        error_ref = lldb.SBError()
+        address = None
+        data = ""
         if self._is_set(kInlineStrFlag):
             str_value = self._get_data('ss').GetChildMemberWithName('str')
             address = str_value.GetAddress().GetOffset()
-            return self._read_string_from_memory(address, chunk_size=32)
+            data = str_value.GetData().GetString(error_ref, 0)
         else:
             str_value = self._get_data('s').GetChildMemberWithName('str')
             address = self._get_address(str_value)
-            return self._read_string_from_memory(address, chunk_size=1024)
+            data = str_value.process.ReadCStringFromMemory(address, 4096, error_ref);
 
-    def _read_string_from_memory(self, starting_address, chunk_size):
-        error_ref = lldb.SBError()
-        process = lldb.debugger.GetSelectedTarget().GetProcess()
+        if not error_ref.Success():
+            return 'Could not read memory 0x%x' % address
 
-        chars = array.array('c')
-        address = starting_address
-        while True:
-            memory = process.ReadMemory(address, chunk_size, error_ref)
-            if not error_ref.Success():
-                return 'Could not read memory 0x%x' % address
-            for c in memory:
-                if c == '\0':
-                    return ''.join(chars)
-                chars.append(c)
-            address += chunk_size
+        return data
 
     def _get_address(self, pointer_value):
         address = int(pointer_value.GetValue(), 16)
